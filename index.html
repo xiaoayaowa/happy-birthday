@@ -11,17 +11,25 @@
     body {
       margin: 0;
       padding: 0;
-      background: #000;
+      /* background: #000;  // 移除黑色背景 */
       color: #fff;
     }
-    #matrix {
+    #matrix, #dotAnim {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
       width: 100vw;
       height: 100vh;
-      z-index: 1;
+      z-index: 10;
       display: block;
       pointer-events: none;
+    }
+    .container {
+      position: relative;
+      z-index: 1;
+      width: 100vw;
+      min-height: 100vh;
+      /* Z字形渐变：左上#1976d2（深蓝），右中#64b5f6（浅蓝），左下#222 */
+      background: linear-gradient(135deg, #1976d2 0%, #64b5f6 60%, #222 100%);
     }
     #dotText {
       position: absolute;
@@ -31,6 +39,9 @@
       z-index: 2;
       pointer-events: none;
     }
+    .screen {
+      background: transparent;
+    }
     @media (max-width: 600px) {
       #dotText {
         width: 90vw !important;
@@ -39,14 +50,25 @@
   </style>
 </head>
 <body>
+  <audio id="bgm" src="./photos/Enya - One by One.mp3" autoplay loop hidden></audio>
   <canvas id="matrix"></canvas>
   <canvas id="dotAnim" style="position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2;pointer-events:none;"></canvas>
-  <div class="screen" style="height:100vh;"></div>
-  <div class="screen" style="height:100vh;"></div>
-  <div class="screen" style="height:100vh;"></div>
-  <div class="screen" style="height:100vh;"></div>
-  <div class="screen" style="height:100vh;"></div>
+  <div class="container">
+    <div class="screen" style="height:100vh;"></div>
+    <div class="screen" style="height:100vh;"></div>
+    <div class="screen" style="height:100vh;"></div>
+    <div class="screen" style="height:100vh;"></div>
+    <div class="screen" style="height:100vh;"></div>
+  </div>
   <script>
+    // 兼容移动端自动播放
+    document.body.addEventListener('click', function() {
+      var audio = document.getElementById('bgm');
+      if (audio) {
+        audio.play();
+      }
+    }, { once: true });
+
     // 字符雨
     const canvas = document.getElementById('matrix');
     const ctx = canvas.getContext('2d');
@@ -62,8 +84,9 @@
     }
     const chars = ['L','O','V','E','U'];
     function drawMatrix() {
-      ctx.fillStyle = 'rgba(0,0,0,0.05)';
-      ctx.fillRect(0, 0, W, H);
+      // ctx.fillStyle = 'rgba(0,0,0,0.05)'; // 移除黑色半透明覆盖
+      // ctx.fillRect(0, 0, W, H);
+      ctx.clearRect(0, 0, W, H); // 只清除画布，保留背景
       ctx.font = fontSize + "px monospace";
       ctx.fillStyle = '#f06292';
       ctx.shadowColor = '#f06292';
@@ -87,6 +110,9 @@
     });
 
     window.onload = function() {
+      // 设置背景音乐音量为60%
+      var bgm = document.getElementById('bgm');
+      if (bgm) bgm.volume = 0.4;
       // 祝福语内容
       const texts = [
         '黄莎莎，生日快乐',
