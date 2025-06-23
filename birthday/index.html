@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>生日快乐</title>
+  <style>
+    html {
+      height: 100%;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      color: #fff;
+    }
+    #matrix {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      display: block;
+      pointer-events: none;
+    }
+    #dotText {
+      position: absolute;
+      left: 50%;
+      top: 40%;
+      transform: translate(-50%, -50%);
+      z-index: 2;
+      pointer-events: none;
+    }
+    @media (max-width: 600px) {
+      #dotText {
+        width: 90vw !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="matrix"></canvas>
+  <canvas id="dotAnim" style="position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2;pointer-events:none;"></canvas>
+  <div class="screen" style="height:100vh;"></div>
+  <div class="screen" style="height:100vh;"></div>
+  <div class="screen" style="height:100vh;"></div>
+  <div class="screen" style="height:100vh;"></div>
+  <div class="screen" style="height:100vh;"></div>
+  <script>
+    // 字符雨
+    const canvas = document.getElementById('matrix');
+    const ctx = canvas.getContext('2d');
+    let W = window.innerWidth;
+    let H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+    const fontSize = 18;
+    const columns = Math.floor(W / fontSize);
+    const drops = [];
+    for (let i = 0; i < columns; i++) {
+      drops[i] = Math.random() * H / fontSize;
+    }
+    const chars = ['L','O','V','E','U'];
+    function drawMatrix() {
+      ctx.fillStyle = 'rgba(0,0,0,0.05)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.font = fontSize + "px monospace";
+      ctx.fillStyle = '#f06292';
+      ctx.shadowColor = '#f06292';
+      ctx.shadowBlur = 12;
+      for (let i = 0; i < drops.length; i++) {
+        const text = chars[Math.floor(Math.random() * chars.length)];
+        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+        if (drops[i] * fontSize > H && Math.random() > 0.975) {
+          drops[i] = 0;
+        }
+        drops[i] += 0.4;
+      }
+      ctx.shadowBlur = 0;
+    }
+    setInterval(drawMatrix, 70);
+    window.addEventListener('resize', () => {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = W;
+      canvas.height = H;
+    });
+
+    window.onload = function() {
+      // 祝福语内容
+      const texts = [
+        '黄莎莎，生日快乐',
+        '但逢良辰，顺颂时宜',
+        '顺逐无虞，皆得所愿',
+        '爱你',
+      ];
+      // 粒子动画canvas
+      const dotCanvas = document.getElementById('dotAnim');
+      let width = window.innerWidth > 700 ? 700 : window.innerWidth * 0.9;
+      let height = 110;
+      function getDotPoints(text) {
+        let tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height + 40;
+        let tempCtx = tempCanvas.getContext('2d');
+        tempCtx.font = 'bold 60px "Microsoft YaHei", Arial, sans-serif';
+        tempCtx.textAlign = 'center';
+        tempCtx.textBaseline = 'middle';
+        // 自动换行：有"，"的地方分行
+        let lines = text.split('，');
+        let lineHeight = 60;
+        let baseY = (height+40)/2 - (lines.length-1)*lineHeight/2 + 20;
+        lines.forEach((line, idx) => {
+          tempCtx.fillText(line, width/2, baseY + idx*lineHeight);
+        });
+        let imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+        let data = imageData.data;
+        let gap = 3;
+        let dots = [];
+        for(let y=0; y<tempCanvas.height; y+=gap) {
+          for(let x=0; x<tempCanvas.width; x+=gap) {
+            let idx = (y*tempCanvas.width + x)*4;
+            if(data[idx+3] > 128) {
+              dots.push({x, y});
+            }
+          }
+        }
+        return dots;
+      }
+      // 生成所有页面的点阵目标
+      let dotTargets = texts.map(t => getDotPoints(t));
+      // 生成消散点（屏幕外随机点）
+      function getScatterPoints(num) {
+        let arr = [];
+        for(let i=0;i<num;i++) {
+          // 随机在屏幕外一圈
+          let angle = Math.random()*2*Math.PI;
+          let r = Math.max(window.innerWidth, window.innerHeight) * 0.7 + Math.random()*100;
+          let x = window.innerWidth/2 + Math.cos(angle)*r;
+          let y = window.innerHeight/2 + Math.sin(angle)*r;
+          arr.push({x, y});
+        }
+        return arr;
+      }
+      // 计算当前滚动进度
+      function getScrollProgress() {
+        const screens = document.querySelectorAll('.screen');
+        const winH = window.innerHeight;
+        let minDist = 1e9, idx = 0;
+        let progress = 0;
+        screens.forEach((screen, i) => {
+          const rect = screen.getBoundingClientRect();
+          const centerDist = rect.top + rect.height/2 - winH/2;
+          if(Math.abs(centerDist) < Math.abs(minDist)) {
+            minDist = centerDist;
+            idx = i;
+            progress = -centerDist/winH + 0.5; // 0~1
+          }
+        });
+        return {idx, progress: Math.max(0, Math.min(1, progress))};
+      }
+      function lerp(a, b, t) { return a + (b - a) * t; }
+      // 缓存消散点，避免每帧都变
+      let scatterCache = {};
+      // 自动加载图片
+      const photoFiles = [
+        '1.jpg','2.jpg','3.jpg',
+        '4.jpg','5.jpg','6.jpg',
+        '7.jpg','8.jpg','9.jpg'
+      ];
+      // 每页最多3张
+      const photosPerPage = 3;
+      const pagePhotos = [];
+      for(let i=0;i<5;i++) {
+        pagePhotos.push(photoFiles.slice(i*photosPerPage, (i+1)*photosPerPage));
+      }
+      // 预加载图片
+      const loadedPhotos = {};
+      photoFiles.forEach(name => {
+        const img = new Image();
+        img.src = './photos/' + name;
+        loadedPhotos[name] = img;
+      });
+      // 花哨英文粒子字绘制函数（自适应手机屏幕，必要时分两行）
+      function drawFancyDotText(ctx, text, centerX, centerY, alpha=1) {
+        // 判断是否需要分两行
+        let isMobile = window.innerWidth < 500;
+        let lines = isMobile ? ['Happy', 'Birthday'] : [text];
+        let fontSize = isMobile ? Math.floor(window.innerWidth * 0.13) : 70;
+        let gap = 3;
+        let totalHeight = lines.length * fontSize + (lines.length-1)*10;
+        for(let li=0;li<lines.length;li++) {
+          let tempCanvas = document.createElement('canvas');
+          let lineWidth = Math.min(window.innerWidth * 0.9, 700);
+          tempCanvas.width = lineWidth;
+          tempCanvas.height = fontSize + 10;
+          let tempCtx = tempCanvas.getContext('2d');
+          tempCtx.font = `bold ${fontSize}px \"Comic Sans MS\", \"Arial Black\", cursive, sans-serif`;
+          tempCtx.textAlign = 'center';
+          tempCtx.textBaseline = 'middle';
+          tempCtx.fillText(lines[li], lineWidth/2, tempCanvas.height/2);
+          let imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+          let data = imageData.data;
+          let dots = [];
+          for(let y=0; y<tempCanvas.height; y+=gap) {
+            for(let x=0; x<tempCanvas.width; x+=gap) {
+              let idx = (y*tempCanvas.width + x)*4;
+              if(data[idx+3] > 128) {
+                dots.push({x, y});
+              }
+            }
+          }
+          // 渐变色
+          let grad = ctx.createLinearGradient(centerX-lineWidth/2, 0, centerX+lineWidth/2, 0);
+          grad.addColorStop(0, '#f06292');
+          grad.addColorStop(0.5, '#fff176');
+          grad.addColorStop(1, '#64b5f6');
+          // 绘制点阵
+          let offsetY = centerY - totalHeight/2 + li*(fontSize+10);
+          for(let i=0;i<dots.length;i++) {
+            let d = dots[i];
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(centerX-lineWidth/2+d.x, offsetY - tempCanvas.height/2 + d.y, 1.3, 0, 2*Math.PI);
+            ctx.fillStyle = grad;
+            ctx.shadowColor = '#fff176';
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+      }
+      function drawMultiPageParticles() {
+        const screens = document.querySelectorAll('.screen');
+        const ctx = dotCanvas.getContext('2d');
+        ctx.clearRect(0,0,dotCanvas.width,dotCanvas.height);
+        const winH = window.innerHeight;
+        for(let page=0; page<screens.length; page++) {
+          let rect = screens[page].getBoundingClientRect();
+          let centerDist = Math.abs(rect.top + rect.height/2 - winH/2);
+          let alpha = 1 - Math.min(centerDist/(winH/2), 1);
+          if(alpha < 0.01) continue;
+          if(page === 0) {
+            // 花哨英文粒子字
+            drawFancyDotText(ctx, 'Happy Birthday', window.innerWidth/2, rect.top + rect.height/2 - 10, alpha);
+            continue;
+          }
+          // 左两张竖直排列，右一张居中于左两图总高度，三图整体包围盒和点阵字中心y对齐，字悬浮在图片上方
+          const imgs = pagePhotos[page-1] || [];
+          const imgCount = imgs.length;
+          let maxW = window.innerWidth * 0.34;
+          let maxH = winH * 0.34;
+          // 计算每张图片实际宽高
+          let drawRects = [];
+          for(let i=0;i<imgCount;i++) {
+            const img = loadedPhotos[imgs[i]];
+            if(img && img.complete) {
+              let scale = Math.min(maxW/img.width, maxH/img.height, 1);
+              let drawW = img.width * scale;
+              let drawH = img.height * scale;
+              drawRects[i] = {drawW, drawH};
+            } else {
+              drawRects[i] = {drawW:0, drawH:0};
+            }
+          }
+          // 计算左两图竖直排列的总高度和最大宽度
+          let gap = 16;
+          let leftTotalH = (drawRects[0]?.drawH||0) + (drawRects[1]?.drawH||0) + gap;
+          let leftMaxW = Math.max(drawRects[0]?.drawW||0, drawRects[1]?.drawW||0);
+          // 右图宽高
+          let rightW = drawRects[2]?.drawW||0;
+          let rightH = drawRects[2]?.drawH||0;
+          // 三图包围盒宽度和高度
+          let boxW = leftMaxW + gap + rightW;
+          let boxH = Math.max(leftTotalH, rightH);
+          // 整体居中x
+          let boxStartX = window.innerWidth/2 - boxW/2;
+          // 居中y：让图片包围盒中心和点阵字中心重合
+          let dots = dotTargets[page-1];
+          let dotCenterY = rect.top + rect.height/2;
+          let boxStartY = dotCenterY - boxH/2;
+          // 左两图坐标
+          let xLeft = boxStartX;
+          let y0 = boxStartY;
+          let y1 = boxStartY + (drawRects[0]?.drawH||0) + gap;
+          // 右图坐标
+          let xRight = boxStartX + leftMaxW + gap;
+          let y2 = boxStartY + (boxH - rightH)/2;
+          // 先绘制三张图片
+          if(imgCount>0) {
+            const img = loadedPhotos[imgs[0]];
+            if(img && img.complete) {
+              ctx.save();
+              ctx.globalAlpha = alpha * 0.8;
+              ctx.drawImage(img, xLeft, y0, drawRects[0].drawW, drawRects[0].drawH);
+              ctx.restore();
+            }
+          }
+          if(imgCount>1) {
+            const img = loadedPhotos[imgs[1]];
+            if(img && img.complete) {
+              ctx.save();
+              ctx.globalAlpha = alpha * 0.8;
+              ctx.drawImage(img, xLeft, y1, drawRects[1].drawW, drawRects[1].drawH);
+              ctx.restore();
+            }
+          }
+          if(imgCount>2) {
+            const img = loadedPhotos[imgs[2]];
+            if(img && img.complete) {
+              ctx.save();
+              ctx.globalAlpha = alpha * 0.8;
+              ctx.drawImage(img, xRight, y2, drawRects[2].drawW, drawRects[2].drawH);
+              ctx.restore();
+            }
+          }
+          // 再绘制字，悬浮在图片上方（中心对齐）
+          if(!dots) continue;
+          for(let i=0;i<dots.length;i++) {
+            let d = dots[i];
+            let dx = d.x + (window.innerWidth-width)/2;
+            let dy = d.y + rect.top + rect.height/2 - height/2;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(dx, dy, 1, 0, 2*Math.PI);
+            ctx.fillStyle = '#fff';
+            ctx.shadowColor = '#f06292';
+            ctx.shadowBlur = 8;
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+        requestAnimationFrame(drawMultiPageParticles);
+      }
+      function resizeAll() {
+        width = window.innerWidth > 700 ? 700 : window.innerWidth * 0.9;
+        dotCanvas.width = window.innerWidth;
+        dotCanvas.height = window.innerHeight;
+        height = 110;
+        dotTargets = texts.map(t => getDotPoints(t));
+      }
+      window.addEventListener('resize', resizeAll);
+      dotCanvas.width = window.innerWidth;
+      dotCanvas.height = window.innerHeight;
+      resizeAll();
+      drawMultiPageParticles();
+    }
+  </script>
+</body>
+</html> 
