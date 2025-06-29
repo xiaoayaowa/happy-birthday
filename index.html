@@ -5,13 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>生日快乐</title>
   <style>
-    html, body {
+    html {
       height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: hidden; /* 禁止默认滚动 */
     }
     body {
+      margin: 0;
+      padding: 0;
       /* background: #000;  // 移除黑色背景 */
       color: #fff;
     }
@@ -31,14 +30,6 @@
       min-height: 100vh;
       /* 对角线渐变：左上#1976d2（蓝），右下#222（黑） */
       background: linear-gradient(135deg, #1976d2 0%, #222 100%);
-      transition: transform 1.2s cubic-bezier(.77,0,.18,1);
-      will-change: transform;
-    }
-    .screen {
-      background: transparent;
-      height: 100vh;
-      width: 100vw;
-      overflow: hidden;
     }
     #dotText {
       position: absolute;
@@ -47,6 +38,9 @@
       transform: translate(-50%, -50%);
       z-index: 2;
       pointer-events: none;
+    }
+    .screen {
+      background: transparent;
     }
     @media (max-width: 600px) {
       #dotText {
@@ -107,7 +101,7 @@
       }
       ctx.shadowBlur = 0;
     }
-    setInterval(drawMatrix, 100);
+    setInterval(drawMatrix, 70);
     window.addEventListener('resize', () => {
       W = window.innerWidth;
       H = window.innerHeight;
@@ -119,13 +113,6 @@
       // 设置背景音乐音量为60%
       var bgm = document.getElementById('bgm');
       if (bgm) bgm.volume = 0.4;
-      
-      // 整页切换逻辑 - 提升到全局
-      let currentPage = 0;
-      const screens = document.querySelectorAll('.screen');
-      const totalPages = screens.length;
-      const container = document.querySelector('.container');
-      
       // 祝福语内容
       const texts = [
         '黄莎莎，生日快乐',
@@ -215,37 +202,8 @@
       }
       // 预加载图片
       const loadedPhotos = {};
-      let loadedCount = 0;
-      const totalImages = photoFiles.length;
-      
-      function checkAllImagesLoaded() {
-        if (loadedCount === totalImages) {
-          // 所有图片加载完成，开始渲染
-          console.log('所有图片加载完成，开始渲染');
-          drawMultiPageParticles();
-        }
-      }
-      
-      // 添加超时保护，确保即使图片加载失败也能显示内容
-      setTimeout(() => {
-        if (loadedCount < totalImages) {
-          console.log('图片加载超时，强制开始渲染');
-          drawMultiPageParticles();
-        }
-      }, 3000); // 3秒后强制开始渲染
-      
       photoFiles.forEach(name => {
         const img = new Image();
-        img.onload = function() {
-          loadedCount++;
-          console.log(`图片 ${name} 加载成功 (${loadedCount}/${totalImages})`);
-          checkAllImagesLoaded();
-        };
-        img.onerror = function() {
-          loadedCount++;
-          console.log(`图片 ${name} 加载失败 (${loadedCount}/${totalImages})`);
-          checkAllImagesLoaded();
-        };
         img.src = './photos/' + name;
         loadedPhotos[name] = img;
       });
@@ -304,25 +262,10 @@
         const ctx = dotCanvas.getContext('2d');
         ctx.clearRect(0,0,dotCanvas.width,dotCanvas.height);
         const winH = window.innerHeight;
-        
-        // 只渲染当前页面和相邻页面，减少不必要的计算
-        const startPage = Math.max(0, currentPage - 1);
-        const endPage = Math.min(screens.length - 1, currentPage + 1);
-        
-        for(let page=startPage; page<=endPage; page++) {
+        for(let page=0; page<screens.length; page++) {
           let rect = screens[page].getBoundingClientRect();
-          
-          // 基于页面距离屏幕中心的距离计算透明度
           let centerDist = Math.abs(rect.top + rect.height/2 - winH/2);
-          let progress = centerDist/(winH/2); // 0~1 表示距离屏幕中心的进度
-          
-          // 渐变逻辑：当前页面完全显示，相邻页面部分显示
-          let alpha = 0;
-          if (progress < 0.5) {
-            // 距离屏幕中心较近时显示
-            alpha = Math.max(0, 1 - progress * 2);
-          }
-          
+          let alpha = 1 - Math.min(centerDist/(winH/2), 1);
           if(alpha < 0.01) continue;
           if(page === 0) {
             // 花哨英文粒子字
@@ -415,19 +358,7 @@
             ctx.restore();
           }
         }
-        
-        // 使用节流控制动画频率
-        if (!window.animationId) {
-          window.animationId = requestAnimationFrame(drawMultiPageParticles);
-        }
-      }
-      
-      // 清理动画ID的函数
-      function cancelAnimation() {
-        if (window.animationId) {
-          cancelAnimationFrame(window.animationId);
-          window.animationId = null;
-        }
+        requestAnimationFrame(drawMultiPageParticles);
       }
       function resizeAll() {
         width = window.innerWidth > 700 ? 700 : window.innerWidth * 0.9;
@@ -440,53 +371,7 @@
       dotCanvas.width = window.innerWidth;
       dotCanvas.height = window.innerHeight;
       resizeAll();
-      
-      function scrollToPage(pageIdx) {
-        currentPage = Math.max(0, Math.min(pageIdx, totalPages - 1));
-        container.style.transform = `translateY(-${currentPage * 100}vh)`;
-      }
-      // 禁止默认滚动
-      document.body.style.overflow = 'hidden';
-      // 监听滚轮
-      let isScrolling = false;
-      window.addEventListener('wheel', function(e) {
-        if (isScrolling) return;
-        isScrolling = true;
-        if (e.deltaY > 0) {
-          scrollToPage(currentPage + 1);
-        } else if (e.deltaY < 0) {
-          scrollToPage(currentPage - 1);
-        }
-        setTimeout(() => { isScrolling = false; }, 1200); // 与CSS过渡时间匹配
-      });
-      // 监听键盘
-      window.addEventListener('keydown', function(e) {
-        if (e.key === 'ArrowDown' || e.key === 'PageDown') {
-          scrollToPage(currentPage + 1);
-        } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
-          scrollToPage(currentPage - 1);
-        }
-      });
-      // 监听触摸滑动
-      let touchStartY = 0;
-      window.addEventListener('touchstart', function(e) {
-        touchStartY = e.touches[0].clientY;
-      });
-      window.addEventListener('touchend', function(e) {
-        let touchEndY = e.changedTouches[0].clientY;
-        if (touchStartY - touchEndY > 50) {
-          scrollToPage(currentPage + 1);
-        } else if (touchEndY - touchStartY > 50) {
-          scrollToPage(currentPage - 1);
-        }
-      });
-      // 确保页面初始化时至少显示第一页内容
-      setTimeout(() => {
-        if (!window.animationId) {
-          console.log('强制启动渲染');
-          drawMultiPageParticles();
-        }
-      }, 100);
+      drawMultiPageParticles();
     }
   </script>
 </body>
