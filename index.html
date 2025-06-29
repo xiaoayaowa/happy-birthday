@@ -107,7 +107,7 @@
       }
       ctx.shadowBlur = 0;
     }
-    setInterval(drawMatrix, 70);
+    setInterval(drawMatrix, 100);
     window.addEventListener('resize', () => {
       W = window.innerWidth;
       H = window.innerHeight;
@@ -221,18 +221,29 @@
       function checkAllImagesLoaded() {
         if (loadedCount === totalImages) {
           // 所有图片加载完成，开始渲染
+          console.log('所有图片加载完成，开始渲染');
           drawMultiPageParticles();
         }
       }
+      
+      // 添加超时保护，确保即使图片加载失败也能显示内容
+      setTimeout(() => {
+        if (loadedCount < totalImages) {
+          console.log('图片加载超时，强制开始渲染');
+          drawMultiPageParticles();
+        }
+      }, 3000); // 3秒后强制开始渲染
       
       photoFiles.forEach(name => {
         const img = new Image();
         img.onload = function() {
           loadedCount++;
+          console.log(`图片 ${name} 加载成功 (${loadedCount}/${totalImages})`);
           checkAllImagesLoaded();
         };
         img.onerror = function() {
           loadedCount++;
+          console.log(`图片 ${name} 加载失败 (${loadedCount}/${totalImages})`);
           checkAllImagesLoaded();
         };
         img.src = './photos/' + name;
@@ -293,7 +304,12 @@
         const ctx = dotCanvas.getContext('2d');
         ctx.clearRect(0,0,dotCanvas.width,dotCanvas.height);
         const winH = window.innerHeight;
-        for(let page=0; page<screens.length; page++) {
+        
+        // 只渲染当前页面和相邻页面，减少不必要的计算
+        const startPage = Math.max(0, currentPage - 1);
+        const endPage = Math.min(screens.length - 1, currentPage + 1);
+        
+        for(let page=startPage; page<=endPage; page++) {
           let rect = screens[page].getBoundingClientRect();
           
           // 基于页面距离屏幕中心的距离计算透明度
@@ -399,7 +415,19 @@
             ctx.restore();
           }
         }
-        requestAnimationFrame(drawMultiPageParticles);
+        
+        // 使用节流控制动画频率
+        if (!window.animationId) {
+          window.animationId = requestAnimationFrame(drawMultiPageParticles);
+        }
+      }
+      
+      // 清理动画ID的函数
+      function cancelAnimation() {
+        if (window.animationId) {
+          cancelAnimationFrame(window.animationId);
+          window.animationId = null;
+        }
       }
       function resizeAll() {
         width = window.innerWidth > 700 ? 700 : window.innerWidth * 0.9;
@@ -452,8 +480,13 @@
           scrollToPage(currentPage - 1);
         }
       });
-      // 页面初始化时滚到第一页
-      scrollToPage(0);
+      // 确保页面初始化时至少显示第一页内容
+      setTimeout(() => {
+        if (!window.animationId) {
+          console.log('强制启动渲染');
+          drawMultiPageParticles();
+        }
+      }, 100);
     }
   </script>
 </body>
